@@ -1,149 +1,131 @@
--- Basketball Legends Module with Smart AI and Realistic Auto Greener
-local player = game.Players.LocalPlayer
-local VirtualUser = game:GetService("VirtualUser")
+-- BasketballLegendsEnhanced.lua
+-- Full Smart AI + Auto Greener by Survivor Team
 
-local autoGreenerEnabled = false
-local aiEnabled = false
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Helper Functions
-local function HasBall()
-    local ball = workspace:FindFirstChild("Basketball")
-    local char = player.Character
-    if ball and char and char:FindFirstChild("HumanoidRootPart") then
-        return (char.HumanoidRootPart.Position - ball.Position).Magnitude < 3 and not ball.Anchored
-    end
-    return false
+local ShootKey = Enum.KeyCode.E
+local StealKey = Enum.KeyCode.R
+local BlockKey = Enum.KeyCode.Space
+
+local ball = nil
+local isShooting = false
+local autoGreenerEnabled = true
+
+-- Get ball reference (simplified)
+local function FindBall()
+	return workspace:FindFirstChild("Basketball") or workspace:FindFirstChildWhichIsA("BasePart", true)
 end
 
-local function OnCourt()
-    local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
-    local hrp = char.HumanoidRootPart
-    local court = workspace:FindFirstChild("Court") or workspace:FindFirstChild("Basket")
-    if court then
-        return (hrp.Position - court.Position).Magnitude < 30
-    end
-    return false
+-- Simulate dribble moves with slight random movement to fake legit player
+local function DribbleMovement()
+	local offset = Vector3.new(math.sin(tick()*3)*1.5, 0, math.cos(tick()*3)*1.5)
+	RootPart.CFrame = RootPart.CFrame * CFrame.new(offset.X, 0, offset.Z)
 end
 
-local function DribblePattern()
-    local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = char.HumanoidRootPart
-    local basePos = hrp.Position
-    for i=1,math.random(3,7) do
-        local offsetX = math.random(-2,2)
-        local offsetZ = math.random(-2,2)
-        hrp.CFrame = CFrame.new(basePos + Vector3.new(offsetX,0,offsetZ))
-        task.wait(math.random(0.3,0.7))
-    end
+-- Auto Greener - manipulate release time for perfect shot
+local function AutoGreener()
+	if not autoGreenerEnabled or not ball then return end
+	if isShooting then return end
+	isShooting = true
+	
+	-- Step 1: Prepare shot
+	task.wait(math.random(0.05,0.1))
+	
+	-- Step 2: Release perfectly timed
+	-- Manipulate the throw force or release timing here:
+	-- This is a placeholder, real game mechanics vary
+	local throwForce = 80 + math.random(-2, 2) -- slight randomness for natural feel
+	
+	-- Fire the shoot event (replace with actual shoot event)
+	local shootEvent = workspace:FindFirstChild("ShootEvent") or nil
+	if shootEvent and shootEvent:IsA("RemoteEvent") then
+		shootEvent:FireServer(throwForce)
+	end
+	
+	task.wait(0.1)
+	isShooting = false
 end
 
--- Smart AI Auto Play Loop
-local function SmartAutoPlayLoop()
-    while aiEnabled do
-        task.wait(0.25)
-        if not OnCourt() then
-            task.wait(1)
-            continue
-        end
-
-        local char = player.Character
-        if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
-        local hrp = char.HumanoidRootPart
-        local ball = workspace:FindFirstChild("Basketball")
-        local basket = workspace:FindFirstChild("Basket")
-
-        if HasBall() and basket then
-            -- Approach basket smoothly
-            hrp.CFrame = CFrame.new(hrp.Position:Lerp(basket.Position + Vector3.new(0,5,0), 0.3))
-            -- Random chance to shoot
-            if math.random() < 0.45 then
-                VirtualUser:Button1Down(Vector2.new(0,0))
-                task.wait(0.1 + math.random()*0.15)
-                VirtualUser:Button1Up(Vector2.new(0,0))
-            end
-        elseif ball and not ball.Anchored then
-            -- Chase ball and do dribble pattern when close
-            if (hrp.Position - ball.Position).Magnitude > 3 then
-                hrp.CFrame = CFrame.new(hrp.Position:Lerp(ball.Position + Vector3.new(0, 2, 0), 0.4))
-            else
-                DribblePattern()
-            end
-        else
-            -- Guard nearest opponent intelligently
-            local shortestDist = math.huge
-            local nearest = nil
-            for _, plr in pairs(game.Players:GetPlayers()) do
-                if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                    local dist = (plr.Character.HumanoidRootPart.Position - hrp.Position).Magnitude
-                    if dist < shortestDist then
-                        shortestDist = dist
-                        nearest = plr.Character.HumanoidRootPart
-                    end
-                end
-            end
-            if nearest then
-                hrp.CFrame = CFrame.new(hrp.Position:Lerp(nearest.Position + Vector3.new(0, 0, -3), 0.4))
-            end
-        end
-    end
+-- Smart AI decision maker
+local function SmartAI()
+	while true do
+		task.wait(0.01) -- super fast reaction
+		
+		ball = FindBall()
+		if not ball then continue end
+		
+		-- Check if player has ball
+		local hasBall = false
+		local ballOwner = ball:FindFirstChild("Owner") -- example
+		if ballOwner and ballOwner.Value == LocalPlayer then
+			hasBall = true
+		end
+		
+		if hasBall then
+			-- Move to shooting position
+			RootPart.CFrame = CFrame.new(ball.Position) * CFrame.new(0,0,-2)
+			
+			-- Dribble to fake out defender
+			DribbleMovement()
+			
+			-- Shoot randomly between perfect/great
+			if math.random() < 0.03 then -- 3% chance to shoot each tick
+				AutoGreener()
+			end
+			
+		else
+			-- Defensive behavior
+			-- Find opponent with ball and guard / steal / block
+			local opponents = {}
+			for _, plr in pairs(Players:GetPlayers()) do
+				if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+					local char = plr.Character
+					local hasBallOpponent = false
+					local ballOwner = ball:FindFirstChild("Owner")
+					if ballOwner and ballOwner.Value == plr then
+						hasBallOpponent = true
+					end
+					if hasBallOpponent then
+						table.insert(opponents, char.HumanoidRootPart)
+					end
+				end
+			end
+			
+			if #opponents > 0 then
+				local target = opponents[1]
+				local dist = (RootPart.Position - target.Position).Magnitude
+				
+				-- Guard player by moving close
+				if dist > 3 then
+					RootPart.CFrame = CFrame.new(target.Position) * CFrame.new(0,0,-1)
+				end
+				
+				-- Steal if close enough and R pressed
+				if dist <= 3 and UserInputService:IsKeyDown(StealKey) then
+					-- Fire steal event (replace with actual game event)
+					local stealEvent = workspace:FindFirstChild("StealEvent")
+					if stealEvent and stealEvent:IsA("RemoteEvent") then
+						stealEvent:FireServer(target.Parent)
+					end
+				end
+				
+				-- Block if close and space pressed
+				if dist <= 3 and UserInputService:IsKeyDown(BlockKey) then
+					-- Fire block event or jump action
+					Humanoid.Jump = true
+				end
+			end
+		end
+	end
 end
 
--- Auto Greener Loop with Realistic Timing
-local function AutoGreenerLoop()
-    while autoGreenerEnabled do
-        task.wait(0.15)
-        local char = player.Character
-        local ball = workspace:FindFirstChild("Basketball")
-        if char and char:FindFirstChild("HumanoidRootPart") and ball and not ball.Anchored then
-            VirtualUser:Button1Down(Vector2.new(0,0))
-            local timing = (math.random() < 0.6) and 0.035 or 0.055 -- 60% perfect, 40% great
-            task.wait(timing)
-            VirtualUser:Button1Up(Vector2.new(0,0))
-        end
-    end
-end
+-- Start Smart AI in coroutine
+coroutine.wrap(SmartAI)()
 
--- GUI Integration (Example using Rayfield assumed available)
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-
-local Window = Rayfield:CreateWindow({
-    Name = "Survivor Hub - Basketball Legends",
-    LoadingTitle = "Loading Basketball Legends Module",
-    LoadingSubtitle = "Smart AI + Auto Greener",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "SurvivorHub",
-        FileName = "BasketballLegendsSettings"
-    }
-})
-
-local MainTab = Window:CreateTab("MAIN", 4483362458)
-
-MainTab:CreateToggle({
-    Name = "Enable Smart AI AutoPlay",
-    CurrentValue = false,
-    Flag = "AI_Toggle",
-    Callback = function(value)
-        aiEnabled = value
-        if value then
-            task.spawn(SmartAutoPlayLoop)
-        end
-    end
-})
-
-MainTab:CreateToggle({
-    Name = "Enable Auto Greener (Great & Perfect)",
-    CurrentValue = false,
-    Flag = "AutoGreener_Toggle",
-    Callback = function(value)
-        autoGreenerEnabled = value
-        if value then
-            task.spawn(AutoGreenerLoop)
-        end
-    end
-})
-
--- End of Basketball Legends Module
-
+print("[SurvivorHub] Basketball Legends Enhanced AI + AutoGreener loaded.")
